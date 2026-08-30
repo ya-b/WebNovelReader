@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>章节阅读 - 小说阅读器</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="sidebar">
+        <a class="nav-btn" href="index.html">📚 我的书架</a>
+        <a class="nav-btn" href="read.html">🔗 输入阅读</a>
+        <a class="nav-btn" href="sources.html">🧩 书源管理</a>
+    </div>
+
+    <button id="sidebar-toggle" onclick="toggleSidebar()" title="收起/展开侧边栏"></button>
+    <script src="sidebar.js"></script>
+    <script>initSidebarState();</script>
+
+    <div id="main-content">
+        <div id="reader-title">加载中...</div>
+        <div id="reader-chapter-name"></div>
+        <div id="reader-text"></div>
+        <div class="bottom-nav">
+            <button class="action-btn" id="retry-btn" style="display: none;" onclick="retryChapter()">🔄 重试</button>
+            <a class="action-btn" id="next-chapter-btn" style="display: none;" href="#">下一章</a>
+        </div>
+
+        <div id="page-buttons">
+            <button class="page-btn" id="pageup-btn" onclick="scrollPage(-1)" title="向上翻页">▲</button>
+            <button class="page-btn" id="pagedown-btn" onclick="scrollPage(1)" title="向下翻页">▼</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/v1';
+        let currentNextUrl = null;
+        let lastReadUrl = null;
+        let prefetchController = null;
+
+        function getQueryParam(name) {
+            const params = new URLSearchParams(window.location.search);
+            return params.get(name);
+        }
+
+        function scrollPage(direction) {
+            // 翻页距离用视口高度（部分 Kindle 浏览器整页滚动，
+            // 此时 #main-content.clientHeight 是全文高度，不能拿来当一屏）。
+            var de = document.documentElement;
+            var step = direction * (de.clientHeight || window.innerHeight || 0) * 0.85;
+            var main = document.getElementById('main-content');
+            var before = main.scrollTop;
+            main.scrollTop += step;
+            if (main.scrollTop === before) {
+                // #main-content 不可滚动时（如 Kindle 整页滚动），退回滚动窗口
+                window.scrollBy(0, step);
+            }
+            positionPageButtons();
+        }
+
+        var lastBtnLeft = null, lastBtnTop = null;
+        // 把翻页按钮吸附到视口右下角。Kindle 墨水屏浏览器不支持 position:fixed，
+        // 既不滚动内层 overflow、也不触发 window 的 scroll 事件，所以靠下面的
+        // setInterval 轮询调用。仅当坐标变化时才写样式，避免墨水屏无谓重绘。
+        function positionPageButtons() {
+            var btns = document.getElementById('page-buttons');
+            if (!btns) return;
+            var de = document.documentElement;
+            var vw = de.clientWidth || window.innerWidth || 0;
+            var vh = de.clientHeight || window.innerHeight || 0;
+            var sx = window.pageXOffset || de.scrollLeft || document.body.scrollLeft || 0;
+            var sy = window.pageYOffset || de.scrollTop || document.body.scrollTop || 0;
+            var left = sx + vw - btns.offsetWidth - 12;
+            var top  = sy + vh - btns.offsetHeight - 12;
+            if (left === lastBtnLeft && top === lastBtnTop) return;
+            lastBtnLeft = left;
+            lastBtnTop = top;
+            btns.style.left = left + 'px';
+            btns.style.top  = top + 'px';
+        }
+
+        function prefetchNextChapter(url) {
+            if (prefetchController) {
+                prefetchController.abort();
+            }
+            prefetchController = new AbortController();
+            fetch(`${API_BASE}/prefetch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: url }),
+                signal: prefetchController.signal
+            }).catch(() => {}); // 静默失败
+        }
+
+        async function readChapter(url) {
+            if (!url) return;
+            lastReadUrl = url;
+
+            document.getElementById('reader-title').textContent = '正在解析内容...';
+            document.getElementById('reader-chapter-name').textContent = '';
+            document.getElementById('reader-text').textContent = '';
+            document.getElementById('next-chapter-btn').style.display = 'none';
+            document.getElementById('retry-btn').style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_BASE}/read`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+
+                const data = await response.json();
+
+                document.getElementById('reader-title').textContent = data.book_name || '未知书名';
+                document.getElementById('reader-chapter-name').textContent = data.chapter_name || '未知章节';
+                document.getElementById('reader-text').textContent = data.content || '无内容';
+                document.getElementById('retry-btn').style.display = 'none';
+
+                if (data.next_url) {
+                    currentNextUrl = data.next_url;
+                    const nextBtn = document.getElementById('next-chapter-btn');
+                    nextBtn.href = 'chapter.html?url=' + encodeURIComponent(data.next_url);
+                    nextBtn.style.display = 'inline-block';
+                    // 预加载下一章
+                    prefetchNextChapter(data.next_url);
+                } else {
+                    currentNextUrl = null;
+                }
+
+                document.getElementById('main-content').scrollTop = 0;
+                positionPageButtons();
+
+            } catch (error) {
+                console.error('读取章节失败:', error);
+                document.getElementById('reader-title').textContent = '读取失败';
+                document.getElementById('reader-text').textContent = '请检查本地服务是否正常运行。';
+                document.getElementById('retry-btn').style.display = 'inline-block';
+            }
+        }
+
+        function retryChapter() {
+            if (lastReadUrl) {
+                readChapter(lastReadUrl);
+            }
+        }
+
+
+        window.onload = function() {
+            const url = getQueryParam('url');
+            if (url) {
+                readChapter(url);
+            } else {
+                document.getElementById('reader-title').textContent = '未指定章节';
+                document.getElementById('reader-text').textContent = '请从书架或输入阅读页面选择章节。';
+            }
+            positionPageButtons();
+        };
+        window.addEventListener('resize', positionPageButtons);
+        window.addEventListener('scroll', positionPageButtons);
+        document.getElementById('main-content').addEventListener('scroll', positionPageButtons);
+        setInterval(positionPageButtons, 300);
+    </script>
+</body>
+</html>
