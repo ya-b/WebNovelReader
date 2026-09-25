@@ -102,6 +102,10 @@ body {
     overflow-y: auto;
 }
 
+#main-content[tabindex="-1"]:focus {
+    outline: none;
+}
+
 h2 {
     border-bottom: 1px solid rgba(0,0,0,0.1);
     padding-bottom: 10px;
@@ -377,6 +381,50 @@ a.action-btn:hover {
         display: block;
         overflow-x: auto;
     }
+}
+
+.file-picker {
+    max-width: 700px;
+    margin: 40px auto;
+    text-align: center;
+}
+
+.file-picker-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 24px;
+}
+
+.chapter-nav {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 56px auto 24px;
+    max-width: 900px;
+}
+
+.chapter-nav select {
+    padding: 10px 14px;
+    font-size: 15px;
+    border: 1px solid #CCC;
+    border-radius: 6px;
+    background-color: #FFF;
+    outline: none;
+    max-width: 420px;
+}
+
+.chapter-nav select:focus {
+    border-color: var(--primary-btn);
+}
+
+.chapter-nav button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 #page-buttons {

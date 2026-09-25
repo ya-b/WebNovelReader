@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地阅读 - 小说阅读器</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="sidebar">
+        <a class="nav-btn" href="index.html">📚 我的书架</a>
+        <a class="nav-btn" href="read.html">🔗 输入阅读</a>
+        <a class="nav-btn active" href="local.html">📁 本地阅读</a>
+        <a class="nav-btn" href="sources.html">🧩 书源管理</a>
+    </div>
+
+    <button id="sidebar-toggle" onclick="toggleSidebar()" title="收起/展开侧边栏"></button>
+    <script src="sidebar.js"></script>
+    <script>initSidebarState();</script>
+
+    <div id="main-content" tabindex="-1">
+        <div id="reader-title" style="display: none;"></div>
+        <div id="reader-chapter-name" style="display: none;"></div>
+
+        <div id="file-picker" class="file-picker">
+            <h2 id="picker-title">本地阅读</h2>
+            <p id="picker-hint" style="color: var(--text-light);">选择本地 TXT 文件，将在浏览器中直接解析阅读：</p>
+            <div class="file-picker-row">
+                <button class="action-btn" id="pick-btn" onclick="document.getElementById('file-input').click()">📂 选择 TXT 文件</button>
+                <span id="file-name" style="color: var(--text-light); word-break: break-all;"></span>
+            </div>
+            <input type="file" id="file-input" accept=".txt,text/plain" style="display: none;" onchange="handleFile(this)">
+        </div>
+
+        <div id="reader-text" style="display: none;"></div>
+        <div id="chapter-nav" class="chapter-nav" style="display: none;">
+            <button class="action-btn" id="prev-chapter-btn" onclick="goChapter(-1)">上一章</button>
+            <select id="chapter-select" onchange="goChapter(parseInt(this.value) - currentIndex)"></select>
+            <button class="action-btn" id="next-chapter-btn" onclick="goChapter(1)">下一章</button>
+        </div>
+    </div>
+
+    <script>
+        let currentIndex = 0;
+        let chapters = [];
+        let bookName = '';
+
+        function handleFile(input) {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            document.getElementById('file-name').textContent = file.name;
+
+            const reader = new FileReader();
+            reader.onload = function() {
+                const buf = reader.result;
+                let text;
+                try {
+                    text = new TextDecoder('utf-8', {fatal: true}).decode(buf);
+                } catch (e) {
+                    try {
+                        text = new TextDecoder('gbk').decode(buf);
+                    } catch (e2) {
+                        text = new TextDecoder('utf-8').decode(buf);
+                    }
+                }
+                bookName = file.name.replace(/\.[^.]+$/, '');
+                chapters = splitChapters(text);
+                if (chapters.length === 0) {
+                    document.getElementById('file-name').textContent = file.name + '（文件为空）';
+                    return;
+                }
+                currentIndex = 0;
+                renderChapter(0);
+            };
+            reader.onerror = function() {
+                alert('文件读取失败');
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function splitChapters(text) {
+            text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            const lines = text.split('\n');
+            const regex = /^\s*(第\s*[0-9零一二三四五六七八九十百千万两〇]+\s*[章章节回节卷集部篇]|(?:序章|序言|楔子|引子|番外|后记|尾声|终章|大结局))[\s:：、.．\-—]*(.*)$/;
+            const result = [];
+            let current = null;
+
+            lines.forEach(function(line) {
+                const trimmed = line.trim();
+                const m = trimmed.match(regex);
+                if (m) {
+                    if (current && (current.content.trim().length > 0 || current.title.trim().length > 0)) {
+                        result.push(current);
+                    }
+                    current = { title: trimmed, content: '' };
+                } else if (current) {
+                    current.content += line + '\n';
+                }
+            });
+            if (current && (current.content.trim().length > 0 || current.title.trim().length > 0)) {
+                result.push(current);
+            }
+
+            if (result.length === 0) {
+                if (text.trim().length > 0) {
+                    result.push({ title: '全文', content: text });
+                }
+                return result;
+            }
+            result.forEach(function(ch) {
+                ch.content = ch.content.replace(/^\n+|\n+$/g, '');
+            });
+            return result;
+        }
+
+        function renderChapter(index) {
+            if (index < 0 || index >= chapters.length) return;
+            currentIndex = index;
+            const ch = chapters[index];
+
+            document.getElementById('file-picker').style.display = 'none';
+            document.getElementById('reader-title').style.display = 'block';
+            document.getElementById('reader-chapter-name').style.display = 'block';
+            document.getElementById('chapter-nav').style.display = 'flex';
+            document.getElementById('reader-text').style.display = 'block';
+
+            document.getElementById('reader-title').textContent = bookName;
+            document.getElementById('reader-chapter-name').textContent = ch.title;
+            document.getElementById('reader-text').textContent = ch.content;
+
+            const prev = document.getElementById('prev-chapter-btn');
+            const next = document.getElementById('next-chapter-btn');
+            prev.disabled = index <= 0;
+            next.disabled = index >= chapters.length - 1;
+
+            const select = document.getElementById('chapter-select');
+            select.innerHTML = '';
+            chapters.forEach(function(c, i) {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = c.title;
+                if (i === index) opt.selected = true;
+                select.appendChild(opt);
+            });
+
+            const main = document.getElementById('main-content');
+            main.scrollTop = 0;
+            main.focus({ preventScroll: true });
+        }
+
+        function goChapter(delta) {
+            renderChapter(currentIndex + delta);
+        }
+    </script>
+</body>
+</html>

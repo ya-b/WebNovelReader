@@ -11,6 +11,7 @@
     <div id="sidebar">
         <a class="nav-btn" href="index.html">📚 我的书架</a>
         <a class="nav-btn active" href="read.html">🔗 输入阅读</a>
+        <a class="nav-btn" href="local.html">📁 本地阅读</a>
         <a class="nav-btn" href="sources.html">🧩 书源管理</a>
     </div>
 
@@ -36,7 +37,7 @@
                 alert('请先输入链接！');
                 return;
             }
-            window.location.href = 'chapter.html?url=' + encodeURIComponent(url);
+            window.location.href = 'chapter.html?url=' + url;
         }
 
     </script>

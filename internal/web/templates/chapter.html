@@ -11,6 +11,7 @@
     <div id="sidebar">
         <a class="nav-btn" href="index.html">📚 我的书架</a>
         <a class="nav-btn" href="read.html">🔗 输入阅读</a>
+        <a class="nav-btn" href="local.html">📁 本地阅读</a>
         <a class="nav-btn" href="sources.html">🧩 书源管理</a>
     </div>
 
@@ -18,7 +19,7 @@
     <script src="sidebar.js"></script>
     <script>initSidebarState();</script>
 
-    <div id="main-content">
+    <div id="main-content" tabindex="-1">
         <div id="reader-title">加载中...</div>
         <div id="reader-chapter-name"></div>
         <div id="reader-text"></div>
@@ -96,6 +97,7 @@
         async function readChapter(url) {
             if (!url) return;
             lastReadUrl = url;
+            currentNextUrl = null;
 
             document.getElementById('reader-title').textContent = '正在解析内容...';
             document.getElementById('reader-chapter-name').textContent = '';
@@ -122,7 +124,7 @@
                 if (data.next_url) {
                     currentNextUrl = data.next_url;
                     const nextBtn = document.getElementById('next-chapter-btn');
-                    nextBtn.href = 'chapter.html?url=' + encodeURIComponent(data.next_url);
+                    nextBtn.href = 'chapter.html?url=' + data.next_url;
                     nextBtn.style.display = 'inline-block';
                     // 预加载下一章
                     prefetchNextChapter(data.next_url);
@@ -130,7 +132,9 @@
                     currentNextUrl = null;
                 }
 
-                document.getElementById('main-content').scrollTop = 0;
+                const main = document.getElementById('main-content');
+                main.scrollTop = 0;
+                main.focus({ preventScroll: true });
                 positionPageButtons();
 
             } catch (error) {
@@ -158,6 +162,19 @@
             }
             positionPageButtons();
         };
+        document.addEventListener('keydown', function(event) {
+            if (event.key !== 'ArrowRight' || !currentNextUrl || event.defaultPrevented ||
+                event.repeat || event.isComposing || event.altKey || event.ctrlKey ||
+                event.metaKey || event.shiftKey) {
+                return;
+            }
+            const target = event.target;
+            if (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) {
+                return;
+            }
+            event.preventDefault();
+            document.getElementById('next-chapter-btn').click();
+        });
         window.addEventListener('resize', positionPageButtons);
         window.addEventListener('scroll', positionPageButtons);
         document.getElementById('main-content').addEventListener('scroll', positionPageButtons);
