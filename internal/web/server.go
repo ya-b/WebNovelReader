@@ -51,6 +51,8 @@ func Run(ctx context.Context, addr string) error {
 		r.Put("/book_sources/{id}", handleUpdateBookSource)
 		r.Delete("/book_sources/{id}", handleDeleteBookSource)
 		r.Post("/book_sources/preview", handlePreviewBookSource(proc))
+		r.Get("/backup/export", handleExportBackup)
+		r.Post("/backup/import", handleImportBackup)
 	})
 
 	srv := &http.Server{Addr: addr, Handler: r}

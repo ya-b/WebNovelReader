@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/go-reader/reader/internal/config"
 	"github.com/go-reader/reader/internal/model"
 	"gorm.io/gorm"
 )
@@ -30,6 +32,29 @@ type BackupStats struct {
 
 // ExportDatabase writes all persisted application tables to a JSON backup.
 func ExportDatabase(ctx context.Context, path string) (BackupStats, error) {
+	if dir := filepath.Dir(path); dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return BackupStats{}, fmt.Errorf("create backup directory: %w", err)
+		}
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return BackupStats{}, fmt.Errorf("create backup: %w", err)
+	}
+	defer f.Close()
+
+	stats, err := ExportDatabaseToWriter(ctx, f)
+	if err != nil {
+		return BackupStats{}, err
+	}
+	if _, err := f.WriteString("\n"); err != nil {
+		return BackupStats{}, fmt.Errorf("write backup: %w", err)
+	}
+	return stats, nil
+}
+
+// ExportDatabaseToWriter writes all persisted application tables as JSON to w.
+func ExportDatabaseToWriter(ctx context.Context, w io.Writer) (BackupStats, error) {
 	g, err := DB()
 	if err != nil {
 		return BackupStats{}, err
@@ -49,17 +74,10 @@ func ExportDatabase(ctx context.Context, path string) (BackupStats, error) {
 		return BackupStats{}, err
 	}
 
-	data, err := json.MarshalIndent(backup, "", "  ")
-	if err != nil {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(backup); err != nil {
 		return BackupStats{}, fmt.Errorf("encode backup: %w", err)
-	}
-	if dir := filepath.Dir(path); dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return BackupStats{}, fmt.Errorf("create backup directory: %w", err)
-		}
-	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
-		return BackupStats{}, fmt.Errorf("write backup: %w", err)
 	}
 
 	return BackupStats{
@@ -71,7 +89,18 @@ func ExportDatabase(ctx context.Context, path string) (BackupStats, error) {
 
 // ImportDatabase replaces all persisted application tables with a JSON backup.
 func ImportDatabase(ctx context.Context, path string) (BackupStats, error) {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
+	if err != nil {
+		return BackupStats{}, fmt.Errorf("read backup: %w", err)
+	}
+	defer f.Close()
+
+	return ImportDatabaseFromReader(ctx, f)
+}
+
+// ImportDatabaseFromReader replaces all persisted application tables with JSON read from r.
+func ImportDatabaseFromReader(ctx context.Context, r io.Reader) (BackupStats, error) {
+	data, err := io.ReadAll(r)
 	if err != nil {
 		return BackupStats{}, fmt.Errorf("read backup: %w", err)
 	}
@@ -87,7 +116,7 @@ func ImportDatabase(ctx context.Context, path string) (BackupStats, error) {
 	if err != nil {
 		return BackupStats{}, err
 	}
-	err = g.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	importFn := func(tx *gorm.DB) error {
 		if err := clearTable(tx, &model.Record{}); err != nil {
 			return err
 		}
@@ -113,7 +142,13 @@ func ImportDatabase(ctx context.Context, path string) (BackupStats, error) {
 			}
 		}
 		return resetPostgresSequences(tx)
-	})
+	}
+
+	if isD1URI(config.Get().DBURI) {
+		err = importFn(g.WithContext(ctx))
+	} else {
+		err = g.WithContext(ctx).Transaction(importFn)
+	}
 	if err != nil {
 		return BackupStats{}, err
 	}

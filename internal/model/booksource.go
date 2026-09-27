@@ -4,7 +4,7 @@ package model
 type BookSource struct {
 	ID             int64  `gorm:"column:id;primaryKey;autoIncrement" json:"id"`
 	BookSourceName string `gorm:"column:bookSourceName;not null" json:"book_source_name"`
-	BookSourceURL  string `gorm:"column:bookSourceUrl;unique" json:"book_source_url"`
+	BookSourceURL  string `gorm:"column:bookSourceUrl;type:varchar(255);unique" json:"book_source_url"`
 
 	BookNameRule       string `gorm:"column:bookName" json:"book_name_rule"`
 	ChapterNameRule    string `gorm:"column:chapterName" json:"chapter_name_rule"`
