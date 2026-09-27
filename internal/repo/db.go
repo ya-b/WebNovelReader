@@ -38,11 +38,15 @@ func DB() (*gorm.DB, error) {
 			dbErr = err
 			return
 		}
-		g, err := gorm.Open(dialector, &gorm.Config{
+		cfg := &gorm.Config{
 			Logger: gormlogger.New(logger.Log, gormlogger.Config{
 				LogLevel: gormlogger.Warn,
 			}),
-		})
+		}
+		if isD1URI(uri) {
+			cfg.SkipDefaultTransaction = true
+		}
+		g, err := gorm.Open(dialector, cfg)
 		if err != nil {
 			dbErr = fmt.Errorf("open database: %w", err)
 			return
@@ -62,7 +66,10 @@ func dialectorForURI(uri string) (gorm.Dialector, error) {
 
 	switch scheme {
 	case "postgres", "postgresql":
-		return postgres.Open(uri), nil
+		return postgres.New(postgres.Config{
+			DSN:                  uri,
+			PreferSimpleProtocol: true,
+		}), nil
 	case "mysql":
 		return mysql.Open(body), nil
 	case "sqlite", "sqlite3":
@@ -74,6 +81,8 @@ func dialectorForURI(uri string) (gorm.Dialector, error) {
 			scheme = "https://"
 		}
 		return RqliteDialector(scheme + body), nil
+	case "d1":
+		return D1Dialector(uri)
 	default:
 		return nil, fmt.Errorf("unsupported DB_URI scheme %q", scheme)
 	}
@@ -91,6 +100,10 @@ func sqliteDSN(dsn string) string {
 
 func isAlpha(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+func isD1URI(uri string) bool {
+	return strings.HasPrefix(strings.ToLower(uri), "d1://")
 }
 
 func Migrate() error {

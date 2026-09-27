@@ -35,6 +35,9 @@ func TestDialectorForURI(t *testing.T) {
 		{name: "rqlite", uri: "rqlite://localhost:4001", wantErr: false},
 		{name: "rqlite auth", uri: "rqlite://user:pass@localhost:4001/?level=strong", wantErr: false},
 		{name: "rqlites", uri: "rqlites://localhost:4001", wantErr: false},
+		{name: "d1 inline", uri: "d1://my_acc:my_tok@db_uuid", wantErr: false},
+		{name: "d1 query", uri: "d1://db_uuid?account_id=acc&token=tok", wantErr: false},
+		{name: "d1 missing credentials", uri: "d1://db_uuid", wantErr: true},
 		{name: "bad", uri: "redis://localhost", wantErr: true},
 	}
 

@@ -111,6 +111,7 @@
         <a class="nav-btn" href="read.html">🔗 输入阅读</a>
         <a class="nav-btn" href="local.html">📁 本地阅读</a>
         <a class="nav-btn" href="sources.html">🧩 书源管理</a>
+        <a class="nav-btn" href="backup.html">💾 备份管理</a>
     </div>
 
     <button id="sidebar-toggle" onclick="toggleSidebar()" title="收起/展开侧边栏"></button>
@@ -185,7 +186,7 @@
                 data.forEach(item => {
                     const card = document.createElement('a');
                     card.className = 'book-card';
-                    card.href = 'chapter.html?url=' + encodeURIComponent(item.chapter_url);
+                    card.href = 'chapter.html?url=' + item.chapter_url;
 
                     card.innerHTML = `
                         <button class="delete-btn" title="删除" onclick="event.preventDefault();event.stopPropagation();showConfirm(${item.id}, '${item.book_name.replace(/'/g, "\\'")}')">✕</button>

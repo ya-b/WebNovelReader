@@ -304,3 +304,40 @@ func handlePrefetch(svc *reading.Service) http.HandlerFunc {
 	}
 }
 
+func handleExportBackup(w http.ResponseWriter, r *http.Request) {
+	filename := time.Now().Format("reader_backup_20060102_150405.json")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+
+	if _, err := repo.ExportDatabaseToWriter(r.Context(), w); err != nil {
+		logger.Log.Errorf("export backup: %v", err)
+	}
+}
+
+func handleImportBackup(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "file too large or invalid multipart")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file required")
+		return
+	}
+	defer file.Close()
+
+	stats, err := repo.ImportDatabaseFromReader(r.Context(), file)
+	if err != nil {
+		logger.Log.Errorf("import backup: %v", err)
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "ok",
+		"stats":  stats,
+	})
+}
+
+

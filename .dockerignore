@@ -1,0 +1,12 @@
+.git
+.gitignore
+.vscode
+bin/
+*.exe
+*.test
+app.log
+.env
+chrome-user-data/
+screenshot/
+Dockerfile
+docker-compose*.yml

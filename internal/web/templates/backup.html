@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>备份管理 - 小说阅读器</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="sidebar">
+        <a class="nav-btn" href="index.html">📚 我的书架</a>
+        <a class="nav-btn" href="read.html">🔗 输入阅读</a>
+        <a class="nav-btn" href="local.html">📁 本地阅读</a>
+        <a class="nav-btn" href="sources.html">🧩 书源管理</a>
+        <a class="nav-btn active" href="backup.html">💾 备份管理</a>
+    </div>
+
+    <button id="sidebar-toggle" onclick="toggleSidebar()" title="收起/展开侧边栏"></button>
+    <script src="sidebar.js"></script>
+    <script>initSidebarState();</script>
+
+    <div id="main-content">
+        <div style="max-width: 900px; margin: 0 auto;">
+            <h2>备份管理</h2>
+
+            <div class="backup-card">
+                <h3>导出数据库</h3>
+                <p style="color: var(--text-light); margin-bottom: 16px;">
+                    将当前数据库的所有阅读记录、书源规则及 LLM 配置导出为 JSON 格式文件下载备份。
+                </p>
+                <button class="action-btn" onclick="exportBackup()">📥 导出并下载备份 (.json)</button>
+            </div>
+
+            <div class="backup-card">
+                <h3>导入数据库</h3>
+                <p style="color: var(--text-light); margin-bottom: 8px;">
+                    从本地选择之前导出的 JSON 备份文件恢复到数据库。
+                </p>
+                <p class="backup-warning">
+                    ⚠️ 导入操作将清空当前数据库中所有的阅读记录、书源和 LLM 配置并全量覆盖，请谨慎操作！
+                </p>
+                <div class="file-picker-row" style="justify-content: flex-start; margin-top: 14px;">
+                    <button class="action-btn" onclick="document.getElementById('import-file-input').click()">📂 选择备份文件</button>
+                    <span id="selected-file-name" style="color: var(--text-light); word-break: break-all;">未选择文件</span>
+                </div>
+                <input type="file" id="import-file-input" accept=".json,application/json" style="display: none;" onchange="handleFileSelect(this)">
+                <div style="margin-top: 18px;">
+                    <button class="action-btn danger-btn" id="import-btn" disabled onclick="showImportConfirm()">⚡ 开始导入</button>
+                </div>
+
+                <div id="import-stats" class="backup-stats"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirm-overlay" class="overlay">
+        <div class="dialog" style="max-width: 420px; text-align: center;">
+            <h3 style="color: #b54a3d;">确认全量覆盖导入？</h3>
+            <p style="color: var(--text-color); margin: 16px 0 24px; line-height: 1.6;">
+                当前数据库中的所有书籍阅读记录、书源规则和配置都将被选中的备份文件全量覆盖。此操作不可逆！
+            </p>
+            <div style="display: flex; gap: 12px; justify-content: center;">
+                <button class="action-btn secondary-btn" onclick="closeImportConfirm()">取消</button>
+                <button class="action-btn danger-btn" id="confirm-import-btn" onclick="performImport()">确认覆盖导入</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/v1';
+        let selectedFile = null;
+
+        function exportBackup() {
+            window.location.href = `${API_BASE}/backup/export`;
+        }
+
+        function handleFileSelect(input) {
+            const file = input.files && input.files[0];
+            const nameEl = document.getElementById('selected-file-name');
+            const importBtn = document.getElementById('import-btn');
+            const statsEl = document.getElementById('import-stats');
+
+            statsEl.classList.remove('active');
+            statsEl.textContent = '';
+
+            if (!file) {
+                selectedFile = null;
+                nameEl.textContent = '未选择文件';
+                importBtn.disabled = true;
+                return;
+            }
+
+            selectedFile = file;
+            nameEl.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            importBtn.disabled = false;
+        }
+
+        function showImportConfirm() {
+            if (!selectedFile) return;
+            document.getElementById('confirm-overlay').classList.add('active');
+        }
+
+        function closeImportConfirm() {
+            document.getElementById('confirm-overlay').classList.remove('active');
+        }
+
+        async function performImport() {
+            if (!selectedFile) return;
+            closeImportConfirm();
+
+            const importBtn = document.getElementById('import-btn');
+            const statsEl = document.getElementById('import-stats');
+            importBtn.disabled = true;
+            importBtn.textContent = '正在导入...';
+
+            statsEl.classList.add('active');
+            statsEl.style.color = 'var(--text-color)';
+            statsEl.textContent = '正在导入备份文件并还原数据库，请稍候...';
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                const res = await fetch(`${API_BASE}/backup/import`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.detail || '导入失败');
+                }
+
+                statsEl.style.color = '#2e7d32';
+                statsEl.innerHTML = `<strong>✅ 导入成功！</strong><br>` +
+                    `阅读记录：${data.stats.Records} 条<br>` +
+                    `书源规则：${data.stats.BookSources} 条<br>` +
+                    `LLM 配置：${data.stats.LLMConfigs} 条`;
+            } catch (err) {
+                console.error('Import error:', err);
+                statsEl.style.color = '#b54a3d';
+                statsEl.textContent = `❌ 导入失败: ${err.message}`;
+            } finally {
+                importBtn.disabled = false;
+                importBtn.textContent = '⚡ 开始导入';
+            }
+        }
+    </script>
+</body>
+</html>

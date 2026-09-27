@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -131,6 +132,51 @@ func TestImportInvalidJSONDoesNotOverwrite(t *testing.T) {
 	}
 	if len(records) != 1 || records[0].BookName != "保留书" {
 		t.Fatalf("records were overwritten: %+v", records)
+	}
+}
+
+func TestExportImportDatabaseStream(t *testing.T) {
+	ctx := setupBackupTestDB(t)
+
+	if err := UpdateRecord(ctx, &model.ChapterContent{
+		BookName:    "流测试书",
+		ChapterName: "第一章",
+		ChapterURL:  "https://example.com/stream/1",
+	}); err != nil {
+		t.Fatalf("create record: %v", err)
+	}
+
+	var buf bytes.Buffer
+	exportStats, err := ExportDatabaseToWriter(ctx, &buf)
+	if err != nil {
+		t.Fatalf("export stream: %v", err)
+	}
+	if exportStats.Records != 1 {
+		t.Fatalf("unexpected export stats: %+v", exportStats)
+	}
+
+	if err := UpdateRecord(ctx, &model.ChapterContent{
+		BookName:    "流测试新增",
+		ChapterName: "第二章",
+		ChapterURL:  "https://example.com/stream/2",
+	}); err != nil {
+		t.Fatalf("create extra record: %v", err)
+	}
+
+	importStats, err := ImportDatabaseFromReader(ctx, &buf)
+	if err != nil {
+		t.Fatalf("import stream: %v", err)
+	}
+	if importStats != exportStats {
+		t.Fatalf("import stats = %+v, want %+v", importStats, exportStats)
+	}
+
+	records, err := GetAllRecords(ctx, "")
+	if err != nil {
+		t.Fatalf("get records: %v", err)
+	}
+	if len(records) != 1 || records[0].BookName != "流测试书" {
+		t.Fatalf("records not restored correctly: %+v", records)
 	}
 }
 
