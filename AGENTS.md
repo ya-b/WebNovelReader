@@ -70,7 +70,15 @@ processor.Processor
 
 ### Webdriver 层
 
-`webdriver.Driver` 是浏览器驱动风格的接口（`Get`/`PageSource`/`ExecuteScript`/...），但仅实现了 `NoneDriver` —— 带 Chrome User-Agent 的纯 `net/http`。`webdriver.New` 忽略其参数，始终返回 `NoneDriver`。`CHROME_DRIVER`、`CHROME_VERSION`、`CHROME_DATA_DIR` 均为占位符。未经协调，请勿添加真实的 chromedp 依赖。
+`webdriver.Driver` 是浏览器驱动风格的接口（`Get`/`PageSource`/`ExecuteScript`/...）。`webdriver.New(name)` 按 `CHROME_DRIVER` 选择实现：
+
+- `none`（默认）→ `NoneDriver`：带 Chrome User-Agent 的纯 `net/http`。
+- `chrome` → `ChromeDriver`：经 chromedp + chromedp-undetected 驱动真实 Chrome（有可见窗口）。
+- `chrome-headless` → `NewChromeHeadlessDriver()`：同一 `ChromeDriver`，通过 `--headless` 无窗口运行。
+
+**无头模式不要使用 cu 的 `cu.WithHeadless()`**：它靠启动 Xvfb 实现，仅在 Linux 可用，在 Windows 上直接返回 `headless mode not supported in windows`。`ChromeDriver` 改为通过 `cu.WithChromeFlags(chromedp.Flag("headless", true), ...)` 传入 Chrome 自身的 headless 参数，并固定带上 `--no-sandbox` 与 `--disable-dev-shm-usage`（容器内默认能力集没有 `CAP_SYS_ADMIN`，SUID 沙箱起不来）。另外 chromedp 的 `DefaultExecAllocatorOptions`（含默认 `Headless`）**不会**被应用，因为 cu 自己调用 `NewExecAllocator`，所以非 headless 分支确实是有窗口的。`CHROME_VERSION` 仍为占位符，未使用；`CHROME_DATA_DIR` 为空时 cu 使用临时目录。
+
+Docker 镜像（`Dockerfile` 运行阶段）安装了 Debian 的 `chromium` 与 `fonts-noto-cjk`，默认 `CHROME_DRIVER=chrome-headless`，并设置 `HOME=/home/reader`（chromium 的 fontconfig/crashpad 缓存需要可写的 HOME）。
 
 ### Repo 层
 

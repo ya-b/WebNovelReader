@@ -23,15 +23,20 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 ########## 运行阶段 ##########
 FROM debian:bookworm-slim
 
+# chromium 提供无头 Chrome（CHROME_DRIVER=chrome-headless 时由 chromedp 找到 /usr/bin/chromium）；
+# fonts-noto-cjk 保证中文页面正常渲染，字体缺失会让 canvas 指纹类反爬挑战失败。
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates tzdata curl \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates tzdata curl \
+        chromium fonts-liberation fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 ENV TZ=Asia/Shanghai \
+    HOME=/home/reader \
     UI_TYPE=webui \
     WEBUI_PORT=56789 \
     WEBUI_TOKEN= \
-    CHROME_DRIVER=none \
+    CHROME_DRIVER=chrome-headless \
     CHROME_DATA_DIR=/data/chrome-user-data \
     DB_URI=sqlite:///data/reader.db
 

@@ -24,10 +24,17 @@ type ChromeDriver struct {
 	mu         sync.Mutex
 	browserCtx context.Context
 	cancel     context.CancelFunc
+	headless   bool
 }
 
 func NewChromeDriver() *ChromeDriver {
 	return &ChromeDriver{}
+}
+
+// NewChromeHeadlessDriver drives Chrome in headless mode (no visible window),
+// which is what servers and CI environments need.
+func NewChromeHeadlessDriver() *ChromeDriver {
+	return &ChromeDriver{headless: true}
 }
 
 func (d *ChromeDriver) Start(_ context.Context) error {
@@ -39,12 +46,26 @@ func (d *ChromeDriver) Start(_ context.Context) error {
 
 	// NoSandbox=false avoids the --test-type flag that cu adds alongside
 	// --no-sandbox, which itself is a detection signal on desktop OSes.
-	// Headless is intentionally off: cu's headless mode requires Xvfb and is
-	// Linux-only; on Windows we need a visible window anyway.
-	cfg := cu.NewConfig(
+	// cu's own cu.WithHeadless() is not used: it spawns Xvfb and errors out on
+	// Windows/macOS, so headless is requested through Chrome's own flag instead.
+	// Headless always adds --no-sandbox: inside a container the SUID sandbox
+	// needs CAP_SYS_ADMIN, which the default capability set does not grant, and
+	// --disable-dev-shm-usage works around the default 64MB /dev/shm.
+	opts := []cu.Option{
 		cu.WithUserDataDir(config.Get().ChromeDataDir),
 		cu.WithNoSandbox(false),
-	)
+	}
+	if d.headless {
+		opts = append(opts, cu.WithChromeFlags(
+			chromedp.Flag("headless", true),
+			chromedp.Flag("no-sandbox", true),
+			chromedp.Flag("disable-dev-shm-usage", true),
+			chromedp.Flag("window-size", "1920,1080"),
+			chromedp.Flag("hide-scrollbars", true),
+			chromedp.Flag("mute-audio", true),
+		))
+	}
+	cfg := cu.NewConfig(opts...)
 
 	ctx, cancel, err := cu.New(cfg)
 	if err != nil {
